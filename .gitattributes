@@ -1,0 +1,2 @@
+Assets/Singularity/Core/Vuplex/WebView/Standalone/Windows/Plugins/VuplexWebViewChromium/libcef.dll filter=lfs diff=lfs merge=lfs -text
+Assets/Singularity/Core/Vuplex/WebView/Standalone/Windows/Plugins/libcef_with_codecs.dll filter=lfs diff=lfs merge=lfs -text
