@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.UI;
 using Vuplex.WebView;
 using Newtonsoft.Json;
+using UnityEngine.UI;
 
 public class SingularityUnitySdk
 {
@@ -29,12 +29,21 @@ public class SingularityUnitySdk
     TaskCompletionSource<string> signTransactionCompletionSource;
     TaskCompletionSource<string> signAndSendTransactionCompletionSource;
     TaskCompletionSource<string> signPersonalMessageCompletionSource;
+    TaskCompletionSource<string> sendNonNativeTokenCompletionSource;
+    TaskCompletionSource<string> sendNftCompletionSource;
+    TaskCompletionSource<string> requestTypedSignatureCompletionSource;
+
 
     private int CALL_TIMEOUT_SECONDS = 10;
 
     public SingularityUnitySdk(ISingularityUnityListener listener)
     {
         _listener = listener;
+    }
+
+    public SingularityUnitySdk()
+    {
+    
     }
 
     public void SetSingularityListener(ISingularityUnityListener listener)
@@ -50,7 +59,6 @@ public class SingularityUnitySdk
 
     public async void InitializeSingularity(string apiKey, GameObject canvas, ISingularityInitListener initListener)
     {
-        Web.EnableRemoteDebugging();
         Web.SetUserAgent("UnityDesktop");
 
         time1 = GetCurrentTimeInMilliseconds();
@@ -59,11 +67,7 @@ public class SingularityUnitySdk
 
         this.canvas = canvas;
 
-        // todo - should be at the right and be hidden
-        //Web.SetUserAgent("UnityDesktop");
         mainWebViewPrefab = CanvasWebViewPrefab.Instantiate();
-
-        //todo - to be hidden at the begining
         Canvas canvasComponent = canvas.GetComponent<Canvas>();
         canvasComponent.enabled = false;
 
@@ -82,12 +86,11 @@ public class SingularityUnitySdk
         if (canvasScaler != null)
         {
             Vector2 referenceResolution = canvasScaler.referenceResolution;
-            Debug.Log("Reference Resolution: " + referenceResolution.x + "x" + referenceResolution.y);
             screenHeight = referenceResolution.y;
         }
 
         Vector2 position = rectTransform.anchoredPosition;
-        position.x = -200;
+        position.x = 400;
         position.y = -(screenHeight / 2);
         rectTransform.anchoredPosition = position;
 
@@ -110,14 +113,10 @@ public class SingularityUnitySdk
         // Change the resolution
         Screen.SetResolution(width + 1, height + 1, isFullScreen);
 
-        // TODO - to be removed at the end
-        mainWebViewPrefab.LogConsoleMessages = true;
-
         mainWebViewPrefab.WebView.SetDefaultBackgroundEnabled(false);
         canvasComponent.enabled = true;
 
         mainWebViewPrefab.WebView.MessageEmitted += Controls_MessageEmitted;
-        //mainWebViewPrefab.WebView.LoadUrl("http://localhost:9094/?api_key=53935&env_key=0");
         mainWebViewPrefab.WebView.LoadUrl("https://mobile-sdk.s9y.gg?api_key="+apiKey+ "&env_key=1");
     }
 
@@ -125,89 +124,77 @@ public class SingularityUnitySdk
     {
         try
         {
-            Debug.Log("Controls_MessageEmitted.inside value: " + eventArgs.Value);
             var message = eventArgs.Value;
 
             Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
 
-            Debug.Log("Controls_MessageEmitted.inside deserialized");
-            Debug.Log(dictionary);
-
             if (dictionary.TryGetValue("type", out object typeValue))
             {
-                Debug.Log("Got type: " + typeValue);
                 if ((string)typeValue == "SOCIAL_LOGIN_BUTTON_CLICKED")
                 {
-                    Debug.Log("----- SOCIAL_LOGIN_BUTTON_CLICKED.inside -----");
                     var loginMethod = dictionary["loginMethod"];
-                    Debug.Log("----- SOCIAL_LOGIN_BUTTON_CLICKED.inside loginMethod-----" + loginMethod);
                     openNewWebViewAndAuth0Auth((string)loginMethod);
                 }
 
                 if ((string)typeValue == "SOCIAL_LOGOUT_EVENT")
                 {
-                    Debug.Log("----- SOCIAL_LOGOUT_EVENT.inside -----");
+                    if (_listener == null) return; 
                     _listener.onUserLogout();
                 }
 
                 if ((string)typeValue == "SOCIAL_LOGIN_EVENT")
                 {
-                    Debug.Log("----- SOCIAL_LOGIN_EVENT.inside -----");
                     var data = dictionary["data"];
-                    Debug.Log("data");
-                    Debug.Log(data);
+                    if (_listener == null) return;
                     _listener.onUserLogIn((string)data);
                 }
 
                 if ((string)typeValue == "DRAWER_OPEN_EVENT")
                 {
-                    Debug.Log("----- DRAWER_OPEN_EVENT.inside -----");
+                    OpenDrawer();
+                    if (_listener == null) return;
                     _listener.onDrawerOpen();
                 }
 
                 if ((string)typeValue == "DRAWER_CLOSE_EVENT")
                 {
-                    Debug.Log("----- DRAWER_CLOSE_EVENT.inside -----");
+                    CloseDrawer();
+                    if (_listener == null) return;
                     _listener.onDrawerClose();
                 }
 
                 if ((string)typeValue == "ON_TRANSACTION_APPROVAL_EVENT")
                 {
-                    Debug.Log("----- ON_TRANSACTION_APPROVAL_EVENT.inside -----");
                     var data = dictionary["data"];
-                    Debug.Log("----- ON_TRANSACTION_APPROVAL_EVENT.inside data-----" + data);
+                    if (_listener == null) return;
                     _listener.onTransactionApprove((string)data);
                 }
 
                 if ((string)typeValue == "ON_TRANSACTION_SUCCESS_EVENT")
                 {
-                    Debug.Log("----- ON_TRANSACTION_SUCCESS_EVENT.inside -----");
                     var data = dictionary["data"];
-                    Debug.Log("----- ON_TRANSACTION_SUCCESS_EVENT.inside data-----" + data);
+                    if (_listener == null) return;
                     _listener.onTransactionSuccess((string)data);
                 }
 
                 if ((string)typeValue == "ON_TRANSACTION_FAILURE_EVENT")
                 {
-                    Debug.Log("----- ON_TRANSACTION_FAILURE_EVENT.inside -----");
                     var data = dictionary["data"];
-                    Debug.Log("----- ON_TRANSACTION_FAILURE_EVENT.inside data-----" + data);
+                    if (_listener == null) return;
                     _listener.onTransactionFailure((string)data);
                 }
 
                 if ((string)typeValue == "INIT_SUCCESS_EVENT")
                 {
-                    Debug.Log("----- INIT_SUCCESS_EVENT.inside -----");
-                    time3 = GetCurrentTimeInMilliseconds();
-                    Debug.Log("Time1: " + time1);
-                    Debug.Log("Time2: " + time2);
-                    Debug.Log("Time3: " + time3);
-
-                    Debug.Log("WebView init time: " + (time2-time1));
-                    Debug.Log("Url Loading time: " + (time3 - time2));
-                    Debug.Log("Total time: " + (time3 - time1)); 
-
+                    time3 = GetCurrentTimeInMilliseconds();                 
+                    if (_initListener == null) return;
                     _initListener.onInitSuccess();
+                }
+
+                if ((string)typeValue == "OPEN_URL_EVENT")
+                {
+                    var url = (string)dictionary["data"];
+                    Application.OpenURL(url);
                 }
 
             }
@@ -221,21 +208,18 @@ public class SingularityUnitySdk
 
     public Task<string> GetConnectedUserInfoAsync()
     {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
         userInfoCompletionSource = new TaskCompletionSource<string>();
 
         System.EventHandler<EventArgs<string>> messageHandler = null;
         messageHandler = (sender, eventArgs) => {
             Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
-            Debug.Log("messageHandler.inside deserialized");
-            Debug.Log(dictionary);
             if (dictionary.TryGetValue("type", out object typeValue))
             {
-                Debug.Log("Got type: " + typeValue);
                 if ((string)typeValue == "USER_INFO_RESULT")
                 {
-                    Debug.Log("----- USER_INFO_RESULT.inside -----");
                     var userData = dictionary["data"];
-                    Debug.Log("----- USER_INFO_RESULT.inside userData-----" + userData);
                     userInfoCompletionSource.TrySetResult((string)userData);
                     mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
                 }
@@ -259,21 +243,18 @@ public class SingularityUnitySdk
 
     public Task<string> SignTransactionAsync(string txData)
     {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
         signTransactionCompletionSource = new TaskCompletionSource<string>();
 
         EventHandler<EventArgs<string>> messageHandler = null;
         messageHandler = (sender, eventArgs) => {
             Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
-            Debug.Log("SignTransactionAsync messageHandler.inside deserialized");
-            Debug.Log(dictionary);
             if (dictionary.TryGetValue("type", out object typeValue))
             {
-                Debug.Log("Got type: " + typeValue);
                 if ((string)typeValue == "SIGN_TRANSACTION_RESULT")
                 {
-                    Debug.Log("----- SIGN_TRANSACTION_RESULT.inside -----");
                     var signTxnResult = dictionary["data"];
-                    Debug.Log("----- SIGN_TRANSACTION_RESULT.inside userData-----" + signTxnResult);
                     signTransactionCompletionSource.TrySetResult((string)signTxnResult);
                     mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
                 }
@@ -290,21 +271,18 @@ public class SingularityUnitySdk
 
     public Task<string> SignPersonalMessageAsync(string message)
     {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
         signPersonalMessageCompletionSource = new TaskCompletionSource<string>();
 
         EventHandler<EventArgs<string>> messageHandler = null;
         messageHandler = (sender, eventArgs) => {
             Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
-            Debug.Log("SignPersonalMessageAsync messageHandler.inside deserialized");
-            Debug.Log(dictionary);
             if (dictionary.TryGetValue("type", out object typeValue))
             {
-                Debug.Log("Got type: " + typeValue);
                 if ((string)typeValue == "SIGN_PERSONAL_MESSAGE_RESULT")
                 {
-                    Debug.Log("----- SIGN_PERSONAL_MESSAGE_RESULT.inside -----");
                     var signTxnResult = dictionary["data"];
-                    Debug.Log("----- SIGN_PERSONAL_MESSAGE_RESULT.inside userData-----" + signTxnResult);
                     signPersonalMessageCompletionSource.TrySetResult((string)signTxnResult);
                     mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
                 }
@@ -313,9 +291,7 @@ public class SingularityUnitySdk
 
         mainWebViewPrefab.WebView.MessageEmitted += messageHandler;
 
-        Debug.Log("Before execute js");
         string jsCode = $"window.SingularityEvent.requestPersonalSignature('{message}');";
-        Debug.Log(jsCode);
         mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
 
         return signPersonalMessageCompletionSource.Task;
@@ -323,21 +299,18 @@ public class SingularityUnitySdk
 
     public Task<string> SignAndSendTransactionAsync(string txData)
     {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
         signAndSendTransactionCompletionSource = new TaskCompletionSource<string>();
 
         EventHandler<EventArgs<string>> messageHandler = null;
         messageHandler = (sender, eventArgs) => {
             Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
-            Debug.Log("SignAndSendTransactionAsync messageHandler.inside deserialized");
-            Debug.Log(dictionary);
             if (dictionary.TryGetValue("type", out object typeValue))
             {
-                Debug.Log("Got type: " + typeValue);
                 if ((string)typeValue == "SIGN_AND_SEND_TRANSACTION_RESULT")
                 {
-                    Debug.Log("----- SIGN_AND_SEND_TRANSACTION_RESULT.inside -----");
                     var signTxnResult = dictionary["data"];
-                    Debug.Log("----- SIGN_AND_SEND_TRANSACTION_RESULT.inside userData-----" + signTxnResult);
                     signAndSendTransactionCompletionSource.TrySetResult((string)signTxnResult);
                     mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
                 }
@@ -352,8 +325,94 @@ public class SingularityUnitySdk
         return signAndSendTransactionCompletionSource.Task;
     }
 
+    public Task<string> SendNonNativeTokenAsync(string txData)
+    {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
+        sendNonNativeTokenCompletionSource = new TaskCompletionSource<string>();
+
+        EventHandler<EventArgs<string>> messageHandler = null;
+        messageHandler = (sender, eventArgs) => {
+            Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
+            if (dictionary.TryGetValue("type", out object typeValue))
+            {
+                if ((string)typeValue == "SEND_NON_NATIVE_TOKEN_RESULT")
+                {
+                    var sendNonNativeTokenResult = dictionary["data"];
+                    sendNonNativeTokenCompletionSource.TrySetResult((string)sendNonNativeTokenResult);
+                    mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
+                }
+            }
+        };
+
+        mainWebViewPrefab.WebView.MessageEmitted += messageHandler;
+
+        string jsCode = $"window.SingularityEvent.sendNonNativeToken('{txData}');";
+        mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
+
+        return sendNonNativeTokenCompletionSource.Task;
+    }
+
+    public Task<string> SendNftAsync(string txData)
+    {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
+        sendNftCompletionSource = new TaskCompletionSource<string>();
+
+        EventHandler<EventArgs<string>> messageHandler = null;
+        messageHandler = (sender, eventArgs) => {
+            Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
+            if (dictionary.TryGetValue("type", out object typeValue))
+            {
+                if ((string)typeValue == "SEND_NFT_RESULT")
+                {
+                    var sendNftResult = dictionary["data"];
+                    sendNftCompletionSource.TrySetResult((string)sendNftResult);
+                    mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
+                }
+            }
+        };
+
+        mainWebViewPrefab.WebView.MessageEmitted += messageHandler;
+
+        string jsCode = $"window.SingularityEvent.sendNft('{txData}');";
+        mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
+
+        return sendNftCompletionSource.Task;
+    }
+
+    public Task<string> RequestTypedSignatureAsync(string domain,string types, string message, string primaryType)
+    {
+        if (mainWebViewPrefab == null) return Task.FromResult("Singularity not initialized");
+
+        requestTypedSignatureCompletionSource = new TaskCompletionSource<string>();
+
+        EventHandler<EventArgs<string>> messageHandler = null;
+        messageHandler = (sender, eventArgs) => {
+            Dictionary<string, object> dictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(eventArgs.Value);
+            if (dictionary.TryGetValue("type", out object typeValue))
+            {
+                if ((string)typeValue == "TYPED_MESSAGE_SIGNATURE_RESULT")
+                {
+                    var typedMessageSignatureResult = dictionary["data"];
+                    requestTypedSignatureCompletionSource.TrySetResult((string)typedMessageSignatureResult);
+                    mainWebViewPrefab.WebView.MessageEmitted -= messageHandler;
+                }
+            }
+        };
+
+        mainWebViewPrefab.WebView.MessageEmitted += messageHandler;
+        string jsCode = $"window.SingularityEvent.requestTypedSignature('{domain}', '{primaryType}', '{types}', '{message}' );";
+        mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
+
+        return requestTypedSignatureCompletionSource.Task;
+    }
+
     public void TransactionFlow(string txData)
     {
+        if (mainWebViewPrefab == null) return;
+
+
         string jsCode = $"window.SingularityEvent.transactionFlow('{txData}');";
         mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
     }
@@ -379,18 +438,31 @@ public class SingularityUnitySdk
 
     public void OpenDrawer()
     {
-        string jsCode = $"window.SingularityEvent.open();";
-        mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
+        if (mainWebViewPrefab == null) return;
+        if (canvas == null) return;
+        var rectTransform = mainWebViewPrefab.transform as RectTransform;
+        
+        Vector2 position = rectTransform.anchoredPosition;
+        position.x = -200;
+        
+        rectTransform.anchoredPosition = position;
     }
 
     public void CloseDrawer()
     {
-        string jsCode = $"window.SingularityEvent.close();";
-        mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
+        if (mainWebViewPrefab == null) return;
+        if (canvas == null) return;
+        var rectTransform = mainWebViewPrefab.transform as RectTransform;
+
+        Vector2 position = rectTransform.anchoredPosition;
+        position.x = 400;
+
+        rectTransform.anchoredPosition = position;
     }
 
     public void LogoutUser()
     {
+        if (mainWebViewPrefab == null) return;
         string jsCode = $"window.SingularityEvent.logout();";
         mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
     }
@@ -493,28 +565,8 @@ public class SingularityUnitySdk
         CreateCloseButton();
         CreatePleaseWaitText();
 
-
-
-
-        Debug.Log("openNewWebViewAndStartGoogleAuth.inside creating new webview" + loginMethod);
-        // Instantiate a second webview above the first to show a UI that
-        // displays the current URL and provides back / forward navigation buttons.
-        //googleLoginWebView = WebViewPrefab.Instantiate(0.6f, 0.05f);
-        //googleLoginWebView.KeyboardEnabled = true;
-        //googleLoginWebView.transform.parent = mainWebViewPrefab.transform;
-        //googleLoginWebView.transform.localPosition = new Vector3(0, 0.06f, 0);
-        //googleLoginWebView.transform.localEulerAngles = Vector3.zero;
-
-        //googleLoginWebView.LogConsoleMessages = true;
-
-        //await Task.WhenAll(new Task[] {
-        //   googleLoginWebView.WaitUntilInitialized(),
-        //});
-
-
         googleLoginWebView = CanvasWebViewPrefab.Instantiate();
 
-        //todo - to be hidden at the begining
         Canvas canvasComponent = canvas.GetComponent<Canvas>();
 
 
@@ -530,12 +582,6 @@ public class SingularityUnitySdk
 
         CanvasScaler canvasScaler = canvas.GetComponent<CanvasScaler>();
         float screenHeight = Screen.height;
-        //if (canvasScaler != null)
-        //{
-        //    Vector2 referenceResolution = canvasScaler.referenceResolution;
-        //    Debug.Log("Reference Resolution: " + referenceResolution.x + "x" + referenceResolution.y);
-        //    screenHeight = referenceResolution.y;
-        //}
         screenHeight = 600;
 
         Vector2 position = rectTransform.anchoredPosition;
@@ -556,26 +602,12 @@ public class SingularityUnitySdk
         int height = Screen.height; // for example, 600 pixels height
         bool isFullScreen = Screen.fullScreen; // set to true for fullscreen
 
-
-        // Change the resolution
-        //Screen.SetResolution(width + 1, height + 1, isFullScreen);
-
-        // TODO - to be removed at the end
-        googleLoginWebView.LogConsoleMessages = true;
-
         googleLoginWebView.WebView.SetDefaultBackgroundEnabled(false);
-        //canvasComponent.enabled = true;
-
-
 
         googleLoginWebView.WebView.UrlChanged += async (sender, eventArgs) => {
-            Debug.Log("googleLoginWebView url changed:" + eventArgs.Url);
             if (eventArgs.Url.Contains("neobrix://unity"))
             {
-                Debug.Log("googleLoginWebView url changed contains callback");
                 var queryParams = ParseQueryString(eventArgs.Url);
-                Debug.Log("googleLoginWebView queryParams");
-                Debug.Log(queryParams);
                 var accessTkn = "";
                 var idTkn = "";
 
@@ -590,9 +622,6 @@ public class SingularityUnitySdk
                     Console.WriteLine("ID Token: " + idToken);
                     idTkn = idToken;
                 }
-
-                Debug.Log("googleLoginWebView accessTkn:" + accessTkn);
-                Debug.Log("googleLoginWebView idTkn:" + idTkn);
 
                 string jsCode = $"window.SingularityMobile.onAuthTokenReceived('{accessToken}', '{idToken}');";
                 await mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
@@ -609,6 +638,7 @@ public class SingularityUnitySdk
 
     public void CustomAuth(string method, string data)
     {
+        if (mainWebViewPrefab == null) return;
         string jsCode = $"window.SingularityEvent.customAuth('{method}', '{data}');";
         mainWebViewPrefab.WebView.ExecuteJavaScript(jsCode);
     }
